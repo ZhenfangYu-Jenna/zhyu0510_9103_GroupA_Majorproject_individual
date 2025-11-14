@@ -13,7 +13,9 @@ Horizontal mouse movement (X-axis): Controls stereo panning. When the mouse is o
 # Personal Design Details
 ## Driving Mechanism:
 This animation is driven by the music's overall amplitude and volume level using p5.Amplitude.
+
 Each ring is surrounded by three concentric halos.
+
 The size of the halos is controlled by the real-time amplitude of the playing sound. When the music intensifies, the halos expand more noticeably; when the music softens, the halos contract closer to the core ring. The inner geometry of the rings themselves remains relatively stable, allowing viewers to observe the structural design amidst the dynamic surrounding glow.
 
 ## Inspiration
@@ -21,6 +23,7 @@ The size of the halos is controlled by the real-time amplitude of the playing so
 Conceptually, this sketch extends my interest in audiovisual synesthesia:
 The halo's diffusion with music draws inspiration from Dope Sound artist's work on Behance—a radiating effect from the center outward.
 [Link text](https://www.behance.net/gallery/87240561/Dope-Sound)
+
 For the sound code, I found inspiration in the Week 11 course materials.
 
 
@@ -38,4 +41,5 @@ Building upon the group project foundation, my primary musical implementations i
 1. Loading and looping audio files using loadSound and song.loop()
 2. Measuring amplitude with p5.Amplitude() and getLevel()
 3. Real-time volume and pan control using song.setVolume() and song.pan().
+
 Whenever I needed specific behaviors—such as mapping mouse movements to sound parameters or creating responsive halos—I consulted the p5.js website for reference and adapted the code to my own visual system.
