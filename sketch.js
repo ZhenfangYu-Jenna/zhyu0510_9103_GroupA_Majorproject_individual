@@ -1,10 +1,39 @@
+// ===== Music & Amplitude Analysis =====
+let song;        // music file
+let amplitude;   // overall volume analysis (amplitude)
 
-let bg;                //Store the background color
-let colorSet;          //Store all colors
-let rings = [];       //Save the random parameters (position/radius/color matching) of each circle
+// Realtime volume & pan
+let volume = 1.0; 
+let pan    = 0.0; 
+
+// Global angle that drives halo animation
+let animAngle = 0;
+
+// ===== Visual Variables =====
+let bg;                // background color
+let colorSet;          // color palette
+let rings = [];        // parameters for each ring
+
+function preload() {
+  song = loadSound('music.mp3');
+}
+
+// Press SPACE to play or pause
+function keyPressed() {
+  if (key === ' ') {
+    userStartAudio();  // audio unlock
+
+    if (!song.isPlaying()) {
+      song.loop();
+      song.setVolume(volume);
+      song.pan(pan);
+    } else {
+      song.pause();
+    }
+  }
+}
 
 function setup() {
-  //Create a canvas as large as the current browser window
   createCanvas(windowWidth, windowHeight);
 
   colorSet = [
@@ -20,97 +49,142 @@ function setup() {
     color(40, 255,200)   // aqua
   ];
   bg = colorSet[0];
-  
-  generateLayout(); 
+
+  // Overall volume analysis (amplitude)
+  if (typeof p5.Amplitude !== 'undefined') {
+    amplitude = new p5.Amplitude();
+    amplitude.setInput(song);
+  } else {
+    amplitude = null;
+  }
+
+  generateLayout();
 }
 
 function draw() {
   background(bg);
-  for (let ring of rings){
-    // Fall progress t (0-1) : Used to control the scaling and fading of halos
-    // The circular figure starts from the top of the canvas and approaches 1 after passing through it
-    const t = constrain((ring.y + ring.r) / (height + ring.r * 2), 0, 1);
-    //constrain() It is used to limit the calculated progress value within the range of 0 to 1 to avoid exceeding the interval.
-    // reference：https://p5js.org/reference/#/p5/constrain
-     
-    // Draw halos
-    drawAura(ring, t);
 
-    //The circular figure maintains a fixed size (does not scale with t)
-      if (ring.style === 'dots') {
+  // === Halo enlarges with amplitude ===
+  let ampFactor = 1.0;
+  if (amplitude) {
+    let level = amplitude.getLevel();             // 0 ~ 0.3 approx
+    ampFactor = map(level, 0, 0.25, 0.5, 2.5);    // 0.5 ~ 2.5
+    ampFactor = constrain(ampFactor, 0.5, 2.5);
+  }
+
+  // halo breathing timing
+  animAngle += 0.05;
+
+  for (let ring of rings) {
+    // falling progress t (0 ~ 1), controls transparency
+    const t = constrain((ring.y + ring.r) / (height + ring.r * 2), 0, 1);
+
+    // halo: breathing controlled by amplitude
+    drawAura(ring, t, ampFactor);
+
+    // fixed main graphic
+    if (ring.style === 'dots') {
       drawDotMandala(ring);
     } else {
       drawCircle(ring);
     }
 
-    // Update the falling position
-    fallAndReset(ring);     
+    // falling & reset
+    fallAndReset(ring);
   }
+
+  // Display realtime Volume / Pan
+  noStroke();
+  fill(255);
+  textAlign(LEFT, TOP);
+  textSize(16);
+  text('Volume: ' + volume.toFixed(2), 20, 20);
+  text('Pan: ' + pan.toFixed(2), 20, 40);
 }
 
-//The halo amplifies and fades out as it falls
-function drawAura(ring, t) {
+// ===== Three-layer halo =====
+function drawAura(ring, t, ampFactor) {
   if (t <= 0) return;
 
-  // Select a color from the palette
-  const c = ring.palette[1];
+  // independent for each ring
+  if (ring.phaseOffset === undefined) {
+    ring.phaseOffset = random(TWO_PI);
+  }
 
-  // alpha gradually decreases from 120 to 0 as it falls
-  const alpha = map(t, 0, 1, 120, 0);
+  // base breathing (slight scaling)
+  const breathe = 1.0 + 0.3 * sin(animAngle + ring.phaseOffset);
 
-  // The radius has been expanded from 1.0 times to approximately 2.6 times
-  const rr = ring.r * (1 + 1.6 * t);
+  // base radius: original r × breathing × global amplitude
+  const base = ring.r * breathe * (ampFactor || 1.0);
+
+  // alpha fades with falling
+  const alpha1 = map(t, 0, 1, 160, 0);  // inner
+  const alpha2 = map(t, 0, 1, 100, 0);  // middle
+  const alpha3 = map(t, 0, 1, 60,  0);  // outer
 
   noStroke();
-  fill(red(c), green(c), blue(c), alpha);
-  circle(ring.x, ring.y, rr * 2);
+
+  const c1 = ring.palette[1 % ring.palette.length];
+  const c2 = ring.palette[2 % ring.palette.length];
+  const c3 = ring.palette[3 % ring.palette.length];
+
+  // outermost (largest, faintest)
+  fill(red(c3), green(c3), blue(c3), alpha3);
+  circle(ring.x, ring.y, base * 2.2);
+
+  // middle
+  fill(red(c2), green(c2), blue(c2), alpha2);
+  circle(ring.x, ring.y, base * 1.7);
+
+  // inner
+  fill(red(c1), green(c1), blue(c1), alpha1);
+  circle(ring.x, ring.y, base * 1.3);
 }
 
-//Control the drop and reset of the circular graphic
-function fallAndReset(ring){
-  ring.y += ring.vy;  // Update the position through speed
+// ===== Falling & Reset =====
+function fallAndReset(ring) {
+  ring.y += ring.vy;
 
-  if (ring.y > height + ring.r){ //When the circle extends beyond the canvas
-    ring.y =- ring.r;  //Let the small ball keep falling
-    ring.x = random(ring.r, width-ring.r); //Random x position
-    ring.vy = random(1,3);  //New falling velocity
-    
-    //random color
+  if (ring.y > height + ring.r) {
+    ring.y = -ring.r;
+    ring.x = random(ring.r, width - ring.r);
+    ring.vy = random(1, 3);
+
+    // reshuffle palette
     ring.palette = [
-      random(colorSet.slice(1)),//Slice is to remove the background color and leave the rest
-      random(colorSet.slice(1)),//Reference: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice
+      random(colorSet.slice(1)),
+      random(colorSet.slice(1)),
       random(colorSet.slice(1)),
       random(colorSet.slice(1)),
       random(colorSet.slice(1)),
     ];
+
+    // reset phase
+    ring.phaseOffset = random(TWO_PI);
   }
 }
 
-
-// ===== generate the data of the circle (position/radius/color scheme) =====
-function generateLayout(){
+// ===== Generate ring layout =====
+function generateLayout() {
   rings = [];
   const S = min(width, height);
 
-  // The quantity of the two types of circles
   const N_SPOKES = 5;
   const N_DOTS   = 7;
 
-  // The size range of the two types of circles
   const Rmin_spokes = S * 0.06;
   const Rmax_spokes = S * 0.09;
   const Rmin_dots   = S * 0.05;
   const Rmax_dots   = S * 0.08;
 
-  const pool = colorSet.slice(1);  // Color library (excluding background)
+  const pool = colorSet.slice(1);  // exclude bg
 
-  // 1.Spokes type: 
-  // It has spokes, an outer ring and a dot matrix ring, with a double-layer dot ending at the center.
-  for (let i = 0; i < N_SPOKES; i++){
+  // 1. spokes type
+  for (let i = 0; i < N_SPOKES; i++) {
     let r = random(Rmin_spokes, Rmax_spokes);
     let x = random(r + 20, width  - r - 20);
-    let y = random(- height, height);
-    let vy = random(3.8, 4.5); //falling velocity
+    let y = random(-height, height);
+    let vy = random(3.8, 4.5);
     let palette = [
       random(pool),
       random(pool),
@@ -118,11 +192,16 @@ function generateLayout(){
       random(pool),
       random(pool)
     ];
-     rings.push({ x, y, r, palette, style: 'spokes', vy });
+    rings.push({
+      x, y, r, palette,
+      style: 'spokes',
+      vy,
+      phaseOffset: random(TWO_PI)
+    });
   }
 
-  // Dots type: A circle composed of concentric dot matrix rings and radiating rays.
-  for (let i = 0; i < N_DOTS; i++){
+  // 2. dots type
+  for (let i = 0; i < N_DOTS; i++) {
     let r = random(Rmin_dots, Rmax_dots);
     let x = random(r + 20, width  - r - 20);
     let y = random(r + 20, height - r - 20);
@@ -134,32 +213,36 @@ function generateLayout(){
       random(pool),
       random(pool)
     ];
-    rings.push({ x, y, r, palette, style: 'dots', vy });
+    rings.push({
+      x, y, r, palette,
+      style: 'dots',
+      vy,
+      phaseOffset: random(TWO_PI)
+    });
   }
 }
 
-// ===== Change in window size=====
-function windowResized(){
+// ===== Resize window =====
+function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   generateLayout();
 }
 
-
-// ===== draw a Spokes type circle (outer ring/spoke/middle ring/lattice/center cap) =====
-function drawCircle(ring){
+// ===== spokes-type ring =====
+function drawCircle(ring) {
   // outer ring
   strokeWeight(max(2, ring.r * 0.08));
   stroke(ring.palette[0]);
   noFill();
   circle(ring.x, ring.y, ring.r * 2);
 
-  // spoke
-  let nSpokes = 15;  //Number of lines
+  // spokes
+  let nSpokes = 15;
   strokeWeight(2);
   stroke(ring.palette[1]);
 
-  for (let i = 0; i < nSpokes; i++){
-    let ang = i * TWO_PI / nSpokes; 
+  for (let i = 0; i < nSpokes; i++) {
+    let ang = i * TWO_PI / nSpokes;
     let x1 = ring.x + ring.r * 0.12 * cos(ang);
     let y1 = ring.y + ring.r * 0.12 * sin(ang);
     let x2 = ring.x + ring.r * 0.88 * cos(ang);
@@ -167,41 +250,37 @@ function drawCircle(ring){
     line(x1, y1, x2, y2);
   }
 
-    // middle ring
+  // middle ring
   strokeWeight(max(2, ring.r * 0.04));
   stroke(ring.palette[2]);
   noFill();
   circle(ring.x, ring.y, ring.r * 1.2);
 
-
-  // lattice
-  // lattice A（outer ring）
+  // lattice A (outer ring)
   noStroke();
-  fill(ring.palette[3]);       // The original color
-  let dotsA = max(7, int(ring.r / 5));  
+  fill(ring.palette[3]);
+  let dotsA = max(7, int(ring.r / 5));
   let rA = ring.r * 0.38;
 
-  for (let i = 0; i < dotsA; i++){
+  for (let i = 0; i < dotsA; i++) {
     let a = i * TWO_PI / dotsA;
     let x = ring.x + rA * cos(a);
     let y = ring.y + rA * sin(a);
-    circle(x, y, 7);           // fixed size
+    circle(x, y, 7);
   }
 
-
-  // lattice B（inter ring）
+  // lattice B (inner ring)
   noStroke();
-  fill(ring.palette[1]);       // Use the spoke color to create a sense of layering
+  fill(ring.palette[1]);
   let dotsB = max(3, int(ring.r / 5));
-  let rB = ring.r * 0.26;      // The radius is significantly larger than the inner circle
+  let rB = ring.r * 0.26;
 
-  for (let i = 0; i < dotsB; i++){
-    let a = i * TWO_PI / dotsB; 
+  for (let i = 0; i < dotsB; i++) {
+    let a = i * TWO_PI / dotsB;
     let x = ring.x + rB * cos(a);
     let y = ring.y + rB * sin(a);
-    circle(x, y, 6);           
+    circle(x, y, 6);
   }
-
 
   // center cap
   noStroke();
@@ -211,16 +290,16 @@ function drawCircle(ring){
   circle(ring.x, ring.y, ring.r * 0.12);
 }
 
-// ===== draw a Dots type circle (outer ring/spoke/middle ring/lattice/center cap) =====
-function drawDotMandala(ring){
+// ===== dots-type ring =====
+function drawDotMandala(ring) {
 
-    // spoke
-  let nSpokes = 8;  //Number of lines
+  // spokes
+  let nSpokes = 8;
   strokeWeight(2);
   stroke(ring.palette[1]);
 
-  for (let i = 0; i < nSpokes; i++){
-    let ang = i * TWO_PI / nSpokes; 
+  for (let i = 0; i < nSpokes; i++) {
+    let ang = i * TWO_PI / nSpokes;
     let x1 = ring.x + ring.r * 0.12 * cos(ang);
     let y1 = ring.y + ring.r * 0.12 * sin(ang);
     let x2 = ring.x + ring.r * 0.80 * cos(ang);
@@ -228,47 +307,60 @@ function drawDotMandala(ring){
     line(x1, y1, x2, y2);
   }
 
-
-  // ---- inter ring ----
-  let n1 = 8;                      // The number of inner circle points
-  let r1 = ring.r * 0.22;          // Inner circle radius
-  let s1 = ring.r * 0.10;          // The size of the inner circle point
+  // inner ring
+  let n1 = 8;
+  let r1 = ring.r * 0.22;
+  let s1 = ring.r * 0.10;
   fill(ring.palette[2]);
 
-  for (let i = 0; i < n1; i++){
+  noStroke();
+  for (let i = 0; i < n1; i++) {
     let a = i * TWO_PI / n1;
     let x = ring.x + r1 * cos(a);
     let y = ring.y + r1 * sin(a);
     circle(x, y, s1);
   }
 
-  //---- middle ring ----
+  // middle ring
   let n2 = 19;
   let r2 = ring.r * 0.52;
   let s2 = ring.r * 0.08;
   fill(ring.palette[3]);
 
-  for (let i = 0; i < n2; i++){
+  for (let i = 0; i < n2; i++) {
     let a = i * TWO_PI / n2;
     let x = ring.x + r2 * cos(a);
     let y = ring.y + r2 * sin(a);
     circle(x, y, s2);
   }
 
-  // ---- outer ring ----
+  // outer ring
   let n3 = 24;
   let r3 = ring.r * 0.55;
   let s3 = ring.r * 0.09;
   fill(ring.palette[4]);
 
-  for (let i = 0; i < n3; i++){
+  for (let i = 0; i < n3; i++) {
     let a = i * TWO_PI / n3;
     let x = ring.x + r3 * cos(a);
     let y = ring.y + r3 * sin(a);
     circle(x, y, s3);
   }
 
-  // small circle in the center
+  // center
   fill(ring.palette[0]);
   circle(ring.x, ring.y, ring.r * 0.20);
+}
+
+// ===== Mouse moves: realtime volume & pan =====
+function mouseMoved() {
+  if (!song) return;
+
+  // map mouse Y to volume 0~1 (top loud, bottom quiet)
+  volume = map(mouseY, 0, height, 1, 0, true);
+  song.setVolume(volume);
+
+  // map mouse X to panning -1~1 (left/right)
+  pan = map(mouseX, 0, width, -1, 1, true);
+  song.pan(pan);
 }
