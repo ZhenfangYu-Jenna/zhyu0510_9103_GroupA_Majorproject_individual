@@ -10,7 +10,7 @@ Music is controlled by mouse movement:
 Vertical mouse movement (Y-axis): Controls volume in real-time. Music is louder at the top of the screen and quieter at the bottom.
 Horizontal mouse movement (X-axis): Controls stereo panning. When the mouse is on the left, sound shifts to the left channel; on the right, sound shifts to the right channel.
 
-### Personal Design Details
+# Personal Design Details
 ## Driving Mechanism:
 This animation is driven by the music's overall amplitude and volume level using p5.Amplitude.
 Each ring is surrounded by three concentric halos.
